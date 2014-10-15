@@ -16,7 +16,7 @@
 class SecureFileExtension extends DataExtension {
 
 	private static $db = array(
-		'CanViewType' => 'Enum("Anyone,LoggedInUsers,OnlyTheseUsers,Inherit","Inherit")',
+		'CanViewType' => 'Enum("Anyone,LoggedInUsers,OnlyTheseUsers,Inherit,NoOne","Inherit")',
 	);
 
 	private static $many_many = array(
@@ -62,7 +62,32 @@ class SecureFileExtension extends DataExtension {
 		}
 		return $canViewType;
 	}
+	
+	/**
+	 * Returns the CanViewType of the closest folder
+	 * 
+	 * @TODO this should likely bubble up until if finds a value that isn't 'Inherit'
+	 * 
+	 * @param type $member
+	 * @return string
+	 */
+	public function getFolderCanViewType($member = null) {
+		if(!$member || !(is_a($member, 'Member')) || is_numeric($member)) {
+			$member = Member::currentUser();
+		}
 
+		// admin override
+		if($member && Permission::checkMember($member, "ADMIN")) {
+			return 'ADMIN';
+		}
+
+		if ($this->owner instanceof Folder) {
+			return $this->owner->CanViewType;
+		} elseif ($this->owner->ParentID) {
+			return $this->owner->Parent()->canParentViewType($member);
+		}
+	}
+	
 	public function canView($member = null) {
 		if(!$member || !(is_a($member, 'Member')) || is_numeric($member)) {
 			$member = Member::currentUser();
@@ -83,6 +108,8 @@ class SecureFileExtension extends DataExtension {
 				case 'OnlyTheseUsers':
 					if ($member && $member->inGroups($this->owner->ViewerGroups())) return true;
 					else return false;
+				case 'NoOne':
+					return false;
 				case 'Anyone':
 				default:
 					return true;
@@ -102,7 +129,7 @@ class SecureFileExtension extends DataExtension {
 		return true;
 	}
 
-	function needsAccessFile() {
+	public function needsAccessFile() {
 		if(SapphireTest::is_running_test()) {
 			return false;
 		}
@@ -110,6 +137,7 @@ class SecureFileExtension extends DataExtension {
 		switch ($this->owner->CanViewType) {
 			case 'LoggedInUsers':
 			case 'OnlyTheseUsers':
+			case 'NoOne':
 				return true;
 			case 'Inherit':
 				// We don't need an access file if access is set to 'inherit', because Apache also uses parent directories .htaccess files
@@ -129,6 +157,7 @@ class SecureFileExtension extends DataExtension {
 			$options['Anyone'] = _t('SiteTree.ACCESSANYONE', 'Anyone');
 			$options['LoggedInUsers'] = _t('SiteTree.ACCESSLOGGEDIN', 'Logged-in users');
 			$options['OnlyTheseUsers'] = _t('SiteTree.ACCESSONLYTHESE', 'Only these people (choose from list)');
+			$options['NoOne'] = _t('SiteTree.ACCESSNONE', 'No One can access this folder (will return 404)');
 
 			$fields->push(
 				new HeaderField(

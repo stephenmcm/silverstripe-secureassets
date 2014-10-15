@@ -43,7 +43,10 @@ class SecureFileController extends Controller {
 			}
 			return $this->sendFile($file);
 		} else {
-			if($file instanceof File) {
+			if($file->getFolderCanViewType() == 'NoOne') {
+				//fake file 
+				$this->response = new SS_HTTPResponse('File Not Found', 404);
+			} elseif($file instanceof File) {
 				// Permission failure
 				Security::permissionFailure($this, 'You are not authorised to access this resource. Please log in.');
 			} else {
